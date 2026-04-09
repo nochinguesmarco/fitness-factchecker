@@ -20,9 +20,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .metric { background: #1a1a1a; border-radius: 8px; padding: 14px; text-align: center; }
 .metric .lbl { font-size: 12px; color: #666; margin-bottom: 4px; }
 .metric .val { font-size: 24px; font-weight: 500; }
-.green { color: #4ade80; }
-.amber { color: #fb923c; }
-.red { color: #f87171; }
+.green { color: #4ade80; } .amber { color: #fb923c; } .red { color: #f87171; }
 .banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem; font-size: 14px; font-weight: 500; }
 .b-green { background: #052e16; color: #4ade80; }
 .b-amber { background: #1c1007; color: #fb923c; }
@@ -49,24 +47,21 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 <div class="wrap">
   <h1>Fitness fact-checker</h1>
   <p class="sub">Audita un creador de Instagram contra evidencia científica en fitness y nutrición</p>
-
   <div class="row">
-    <input type="text" id="handle" placeholder="@nickbarefitness" value="@nickbarefitness" />
+    <input type="text" id="handle" value="@nickbarefitness" />
     <button id="btn" onclick="run()">Analizar</button>
   </div>
-
   <div class="status" id="status"></div>
   <div id="out"></div>
 </div>
-
 <script>
 const BACKEND = '/api/analyze';
-const DEMO_POSTS = [
-  "Eating foods that fuel me, make me feel good and that I prepare is important to me. I've eaten cold beef/rice bowls in my truck, on a plane, in the back of an uber. It saves time, money and a stomach ache in many cases. The older I get, the more I appreciate a beef and rice bowl.",
-  "Lift Heavy, Run Far. Hybrid boys week. 2 loops on the G1M Ultra course and a pull strength session. Training both strength and endurance simultaneously builds hybrid athleticism.",
-  "Running for the love and not the data. My new watch doesn't track distance or pace. Sometimes removing metrics helps mental performance and enjoyment.",
+const POSTS = [
+  "Eating foods that fuel me, make me feel good and that I prepare is important to me. Beef and rice bowls save time, money and a stomach ache. The older I get, the more I appreciate whole foods.",
+  "Lift Heavy, Run Far. Training both strength and endurance simultaneously builds hybrid athleticism. Pull strength session after 2 loops on course.",
+  "Running for the love and not the data. Sometimes removing metrics helps mental performance and intrinsic motivation.",
   "We trained hard and ate well. Brotherhood builds mental resilience. Community and social bonds are key to long term adherence in fitness.",
-  "3 DAYS OUT from competition. Peak week protocols in effect. Carb loading and water manipulation for performance optimization.",
+  "3 DAYS OUT from competition. Peak week protocols. Carb loading and water manipulation for performance optimization.",
   "Recovery is training. Sleep, nutrition timing, and stress management are as important as the workout itself for adaptation."
 ];
 
@@ -85,7 +80,9 @@ async function callClaude(prompt) {
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const d = await r.json();
-  const text = d.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  const data = d.debug || d;
+  if (!data.content) throw new Error(JSON.stringify(data));
+  const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
   return JSON.parse(text);
 }
 
@@ -97,20 +94,20 @@ async function run() {
 
   try {
     setStatus('Extrayendo claims científicos...');
-    const claims = await callClaude(`You are a scientific claim extractor for fitness and nutrition. From these Instagram captions from ${handle}, extract ONLY empirically verifiable claims about the human body, exercise, or nutrition. RULES: Only claims verifiable against peer-reviewed research. Ignore motivation, opinions, anecdotes, vague statements. Rephrase in neutral technical language. Classify: nutrition | training | recovery | supplementation | body_composition | mindset_performance. Return [] if no auditable claims. Return ONLY valid JSON array, zero prose. FORMAT: [{"claim":"...","category":"...","original_text":"..."}] CAPTIONS: ${DEMO_POSTS.join('\n---\n')}`);
+    const claims = await callClaude(`You are a scientific claim extractor for fitness and nutrition. From these Instagram captions from ${handle}, extract ONLY empirically verifiable claims about the human body, exercise, or nutrition. RULES: Only claims verifiable against peer-reviewed research. Ignore motivation, opinions, anecdotes. Rephrase in neutral technical language. Classify: nutrition|training|recovery|supplementation|body_composition|mindset_performance. Return [] if none. Return ONLY valid JSON array, zero prose. FORMAT:[{"claim":"...","category":"...","original_text":"..."}] CAPTIONS:${POSTS.join('\n---\n')}`);
 
     if (!claims || claims.length === 0) {
       setStatus('');
-      out.innerHTML = '<div class="err">No se encontraron claims científicamente auditables.</div>';
+      out.innerHTML = '<div class="err">No se encontraron claims auditables.</div>';
       document.getElementById('btn').disabled = false;
       return;
     }
 
-    setStatus(`${claims.length} claims encontrados. Evaluando evidencia...`);
-    const evaluated = await callClaude(`You are a sports science researcher. Evaluate each claim against peer-reviewed literature. RUBRIC: 8-10 meta-analyses/RCTs, 5-7 mixed evidence, 2-4 weak evidence, 0-1 contradicted. CLAIMS: ${JSON.stringify(claims)}. Return ONLY valid JSON array: [{"claim":"...","category":"...","score":7,"verdict":"PARTIALLY_SUPPORTED","reasoning":"2 sentences","nuance":"..."}]. Verdicts: WELL_SUPPORTED | PARTIALLY_SUPPORTED | NOT_SUPPORTED | CONTRADICTED`);
+    setStatus(`${claims.length} claims. Evaluando evidencia...`);
+    const evaluated = await callClaude(`You are a sports science researcher. Evaluate each claim vs peer-reviewed literature. RUBRIC:8-10 meta-analyses/RCTs,5-7 mixed,2-4 weak,0-1 contradicted. CLAIMS:${JSON.stringify(claims)}. Return ONLY valid JSON:[{"claim":"...","category":"...","score":7,"verdict":"PARTIALLY_SUPPORTED","reasoning":"2 sentences","nuance":"..."}]. Verdicts:WELL_SUPPORTED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|CONTRADICTED`);
 
     setStatus('Generando reporte...');
-    const report = await callClaude(`Audit ${handle} for scientific accuracy. CLAIMS: ${JSON.stringify(evaluated)}. WEIGHTS: nutrition=1.5x, supplementation=1.2x, training/recovery/body_composition=1.0x, mindset_performance=0.8x. Return ONLY valid JSON: {"overall_score":6.4,"grade":"B-","verdict":"FOLLOW_WITH_CAUTION","total_claims":${evaluated.length},"red_flags":[],"strengths":[],"summary":"2-3 sentences","recommendation":"1 sentence"}. verdict: RELIABLE_SOURCE | FOLLOW_WITH_CAUTION | DO_NOT_FOLLOW. grade: A+ A A- B+ B B- C+ C C- D F`);
+    const report = await callClaude(`Audit ${handle} scientific accuracy. CLAIMS:${JSON.stringify(evaluated)}. WEIGHTS:nutrition=1.5x,supplementation=1.2x,training/recovery/body_composition=1.0x,mindset_performance=0.8x. Return ONLY valid JSON:{"overall_score":6.4,"grade":"B-","verdict":"FOLLOW_WITH_CAUTION","total_claims":${evaluated.length},"red_flags":[],"strengths":[],"summary":"2-3 sentences","recommendation":"1 sentence"}. verdict:RELIABLE_SOURCE|FOLLOW_WITH_CAUTION|DO_NOT_FOLLOW. grade:A+|A|A-|B+|B|B-|C+|C|C-|D|F`);
 
     setStatus('');
     render(handle, report, evaluated);
@@ -125,22 +122,12 @@ function render(handle, r, claims) {
   const initials = handle.replace('@','').slice(0,2).toUpperCase();
   const claimsHtml = claims.map(c => `
     <div class="claim">
-      <div class="claim-top">
-        <span class="claim-text">${c.claim}</span>
-        <span class="badge ${badgeClass(c.score)}">${c.score}/10</span>
-      </div>
+      <div class="claim-top"><span class="claim-text">${c.claim}</span><span class="badge ${badgeClass(c.score)}">${c.score}/10</span></div>
       <div class="claim-reason">${c.reasoning}</div>
       <div class="claim-cat">${c.category} · ${c.verdict}</div>
     </div>`).join('');
-
   document.getElementById('out').innerHTML = `
-    <div class="profile-card">
-      <div class="avatar">${initials}</div>
-      <div class="pinfo">
-        <h3>${handle}</h3>
-        <p>${claims.length} claims analizados · ${DEMO_POSTS.length} posts</p>
-      </div>
-    </div>
+    <div class="profile-card"><div class="avatar">${initials}</div><div class="pinfo"><h3>${handle}</h3><p>${claims.length} claims · ${POSTS.length} posts</p></div></div>
     <div class="metric-grid">
       <div class="metric"><div class="lbl">Score</div><div class="val ${scoreColor(r.overall_score)}">${r.overall_score}</div></div>
       <div class="metric"><div class="lbl">Grado</div><div class="val ${gradeColor(r.grade)}">${r.grade}</div></div>
@@ -149,9 +136,7 @@ function render(handle, r, claims) {
     </div>
     <div class="banner ${verdictBanner(r.verdict)}">${verdictLabel(r.verdict)} — ${r.verdict}</div>
     <div class="summary">${r.summary}<br><br><strong style="color:#e5e5e5">Recomendación:</strong> ${r.recommendation}</div>
-    <div class="claims-lbl">Claims analizados</div>
-    ${claimsHtml}
-  `;
+    <div class="claims-lbl">Claims analizados</div>${claimsHtml}`;
 }
 </script>
 </body>
