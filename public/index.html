@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitness Fact-Checker</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 2rem; }
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; }
+.sub { font-size: 13px; color: #888; margin-bottom: 2rem; }
+.row { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+input { flex: 1; height: 40px; padding: 0 14px; font-size: 14px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #e5e5e5; }
+button { height: 40px; padding: 0 20px; font-size: 14px; background: #e5e5e5; color: #0a0a0a; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; }
+button:hover { background: #fff; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.status { font-size: 13px; color: #888; min-height: 20px; margin-bottom: 1rem; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1rem; }
+.metric { background: #1a1a1a; border-radius: 8px; padding: 14px; text-align: center; }
+.metric .lbl { font-size: 12px; color: #666; margin-bottom: 4px; }
+.metric .val { font-size: 24px; font-weight: 500; }
+.green { color: #4ade80; }
+.amber { color: #fb923c; }
+.red { color: #f87171; }
+.banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem; font-size: 14px; font-weight: 500; }
+.b-green { background: #052e16; color: #4ade80; }
+.b-amber { background: #1c1007; color: #fb923c; }
+.b-red { background: #1c0a0a; color: #f87171; }
+.summary { background: #1a1a1a; border-radius: 8px; padding: 14px; font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 1rem; }
+.claims-lbl { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+.claim { background: #1a1a1a; border: 1px solid #222; border-radius: 8px; padding: 14px; margin-bottom: 8px; }
+.claim-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+.claim-text { font-size: 13px; flex: 1; line-height: 1.5; }
+.badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; white-space: nowrap; font-weight: 500; }
+.bg-green { background: #052e16; color: #4ade80; }
+.bg-amber { background: #1c1007; color: #fb923c; }
+.bg-red { background: #1c0a0a; color: #f87171; }
+.claim-reason { font-size: 12px; color: #777; line-height: 1.5; }
+.claim-cat { font-size: 11px; color: #555; margin-top: 4px; }
+.profile-card { background: #1a1a1a; border: 1px solid #222; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 14px; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: #1e3a5f; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 15px; color: #60a5fa; flex-shrink: 0; }
+.pinfo h3 { font-size: 15px; font-weight: 500; }
+.pinfo p { font-size: 13px; color: #666; }
+.err { font-size: 13px; color: #f87171; background: #1c0a0a; border-radius: 8px; padding: 12px 16px; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fitness fact-checker</h1>
+  <p class="sub">Audita un creador de Instagram contra evidencia científica en fitness y nutrición</p>
+
+  <div class="row">
+    <input type="text" id="handle" placeholder="@nickbarefitness" value="@nickbarefitness" />
+    <button id="btn" onclick="run()">Analizar</button>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div id="out"></div>
+</div>
+
+<script>
+const BACKEND = '/api/analyze';
+const DEMO_POSTS = [
+  "Eating foods that fuel me, make me feel good and that I prepare is important to me. I've eaten cold beef/rice bowls in my truck, on a plane, in the back of an uber. It saves time, money and a stomach ache in many cases. The older I get, the more I appreciate a beef and rice bowl.",
+  "Lift Heavy, Run Far. Hybrid boys week. 2 loops on the G1M Ultra course and a pull strength session. Training both strength and endurance simultaneously builds hybrid athleticism.",
+  "Running for the love and not the data. My new watch doesn't track distance or pace. Sometimes removing metrics helps mental performance and enjoyment.",
+  "We trained hard and ate well. Brotherhood builds mental resilience. Community and social bonds are key to long term adherence in fitness.",
+  "3 DAYS OUT from competition. Peak week protocols in effect. Carb loading and water manipulation for performance optimization.",
+  "Recovery is training. Sleep, nutrition timing, and stress management are as important as the workout itself for adaptation."
+];
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function scoreColor(s) { return s >= 7 ? 'green' : s >= 4 ? 'amber' : 'red'; }
+function badgeClass(s) { return s >= 7 ? 'bg-green' : s >= 4 ? 'bg-amber' : 'bg-red'; }
+function verdictBanner(v) { return v === 'RELIABLE_SOURCE' ? 'b-green' : v === 'FOLLOW_WITH_CAUTION' ? 'b-amber' : 'b-red'; }
+function verdictLabel(v) { return v === 'RELIABLE_SOURCE' ? 'Fuente confiable' : v === 'FOLLOW_WITH_CAUTION' ? 'Seguir con cautela' : 'No recomendado'; }
+function gradeColor(g) { return ['A+','A','A-'].includes(g) ? 'green' : ['B+','B','B-','C+','C'].includes(g) ? 'amber' : 'red'; }
+
+async function callClaude(prompt) {
+  const r = await fetch(BACKEND, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  const text = d.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  return JSON.parse(text);
+}
+
+async function run() {
+  const handle = document.getElementById('handle').value.trim() || '@nickbarefitness';
+  const out = document.getElementById('out');
+  out.innerHTML = '';
+  document.getElementById('btn').disabled = true;
+
+  try {
+    setStatus('Extrayendo claims científicos...');
+    const claims = await callClaude(`You are a scientific claim extractor for fitness and nutrition. From these Instagram captions from ${handle}, extract ONLY empirically verifiable claims about the human body, exercise, or nutrition. RULES: Only claims verifiable against peer-reviewed research. Ignore motivation, opinions, anecdotes, vague statements. Rephrase in neutral technical language. Classify: nutrition | training | recovery | supplementation | body_composition | mindset_performance. Return [] if no auditable claims. Return ONLY valid JSON array, zero prose. FORMAT: [{"claim":"...","category":"...","original_text":"..."}] CAPTIONS: ${DEMO_POSTS.join('\n---\n')}`);
+
+    if (!claims || claims.length === 0) {
+      setStatus('');
+      out.innerHTML = '<div class="err">No se encontraron claims científicamente auditables.</div>';
+      document.getElementById('btn').disabled = false;
+      return;
+    }
+
+    setStatus(`${claims.length} claims encontrados. Evaluando evidencia...`);
+    const evaluated = await callClaude(`You are a sports science researcher. Evaluate each claim against peer-reviewed literature. RUBRIC: 8-10 meta-analyses/RCTs, 5-7 mixed evidence, 2-4 weak evidence, 0-1 contradicted. CLAIMS: ${JSON.stringify(claims)}. Return ONLY valid JSON array: [{"claim":"...","category":"...","score":7,"verdict":"PARTIALLY_SUPPORTED","reasoning":"2 sentences","nuance":"..."}]. Verdicts: WELL_SUPPORTED | PARTIALLY_SUPPORTED | NOT_SUPPORTED | CONTRADICTED`);
+
+    setStatus('Generando reporte...');
+    const report = await callClaude(`Audit ${handle} for scientific accuracy. CLAIMS: ${JSON.stringify(evaluated)}. WEIGHTS: nutrition=1.5x, supplementation=1.2x, training/recovery/body_composition=1.0x, mindset_performance=0.8x. Return ONLY valid JSON: {"overall_score":6.4,"grade":"B-","verdict":"FOLLOW_WITH_CAUTION","total_claims":${evaluated.length},"red_flags":[],"strengths":[],"summary":"2-3 sentences","recommendation":"1 sentence"}. verdict: RELIABLE_SOURCE | FOLLOW_WITH_CAUTION | DO_NOT_FOLLOW. grade: A+ A A- B+ B B- C+ C C- D F`);
+
+    setStatus('');
+    render(handle, report, evaluated);
+  } catch(e) {
+    setStatus('');
+    out.innerHTML = `<div class="err">Error: ${e.message}</div>`;
+  }
+  document.getElementById('btn').disabled = false;
+}
+
+function render(handle, r, claims) {
+  const initials = handle.replace('@','').slice(0,2).toUpperCase();
+  const claimsHtml = claims.map(c => `
+    <div class="claim">
+      <div class="claim-top">
+        <span class="claim-text">${c.claim}</span>
+        <span class="badge ${badgeClass(c.score)}">${c.score}/10</span>
+      </div>
+      <div class="claim-reason">${c.reasoning}</div>
+      <div class="claim-cat">${c.category} · ${c.verdict}</div>
+    </div>`).join('');
+
+  document.getElementById('out').innerHTML = `
+    <div class="profile-card">
+      <div class="avatar">${initials}</div>
+      <div class="pinfo">
+        <h3>${handle}</h3>
+        <p>${claims.length} claims analizados · ${DEMO_POSTS.length} posts</p>
+      </div>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><div class="lbl">Score</div><div class="val ${scoreColor(r.overall_score)}">${r.overall_score}</div></div>
+      <div class="metric"><div class="lbl">Grado</div><div class="val ${gradeColor(r.grade)}">${r.grade}</div></div>
+      <div class="metric"><div class="lbl">Claims</div><div class="val">${r.total_claims}</div></div>
+      <div class="metric"><div class="lbl">Red flags</div><div class="val ${r.red_flags?.length > 0 ? 'red' : 'green'}">${r.red_flags?.length || 0}</div></div>
+    </div>
+    <div class="banner ${verdictBanner(r.verdict)}">${verdictLabel(r.verdict)} — ${r.verdict}</div>
+    <div class="summary">${r.summary}<br><br><strong style="color:#e5e5e5">Recomendación:</strong> ${r.recommendation}</div>
+    <div class="claims-lbl">Claims analizados</div>
+    ${claimsHtml}
+  `;
+}
+</script>
+</body>
+</html>
