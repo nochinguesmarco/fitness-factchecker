@@ -16,13 +16,13 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5',
         max_tokens: 1500,
         messages: [{ role: 'user', content: prompt }]
       })
     })
     const data = await r.json()
-    return res.status(200).json(data)
+    return res.status(200).json({ debug: data })
   } catch(e) {
     return res.status(500).json({ error: e.message })
   }
